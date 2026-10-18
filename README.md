@@ -37,4 +37,18 @@
 # 
 
 # Reproduce: `python audit.py`
+## Part A: Cleaning rules
 
+| Rule | Rows or values changed |
+|---|---|
+| Convert order_ts to datetime | 13,084 rows |
+| Remove exact duplicate rows | 119 |
+| Keep latest record per order_id | 656 (12,965 → 12,309) |
+| Fill non-numeric or blank order_amount from price | 112 (after deduplication) |
+| Negative delivery_minutes set to missing | TBD |
+| Fill missing delivery_minutes (completed) with category median | TBD |
+| Normalise city (strip, title case) | TBD |
+| Map gender spellings to male/female/unknown | TBD |
+| Ages outside 10–100 set to missing, then filled by city median | 67 missing before fill |
+
+Reproduce: `python clean_customers.py`, `python clean_orders.py`, `python store.py`, `python validate.py`
