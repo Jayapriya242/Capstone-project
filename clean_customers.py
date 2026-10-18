@@ -1,6 +1,7 @@
 import pandas as pd
 
 customers = pd.read_csv("data/raw/customers.csv")
+raw_city, raw_gender = customers["city"].copy(), customers["gender"].copy()
 
 # 1. City: strip spaces, then title case
 customers["city"] = customers["city"].str.strip().str.title()
@@ -12,6 +13,8 @@ gender_map = {"male": "male", "m": "male", "female": "female", "f": "female"}
 customers["gender"] = customers["gender"].fillna("").str.strip().str.lower().map(gender_map).fillna("unknown")
 print("gender counts:")
 print(customers["gender"].value_counts())
+print("cities changed:", (raw_city != customers["city"]).sum())
+print("genders changed:", (raw_gender.fillna("") != customers["gender"]).sum())
 
 # 3. Age: outside 10-100 becomes missing, then fill with the city median
 customers.loc[(customers["age"] < 10) | (customers["age"] > 100), "age"] = None
