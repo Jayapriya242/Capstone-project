@@ -21,3 +21,4 @@ customers["age"] = customers["age"].fillna(
 print("missing ages after fill:", customers["age"].isna().sum())
 print("age min/max:", customers["age"].min(), customers["age"].max())
 print("rows:", len(customers))
+customers.to_csv("data/clean/customers.csv", index=False)

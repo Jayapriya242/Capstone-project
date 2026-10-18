@@ -33,3 +33,8 @@ print("missing amounts:", orders["order_amount"].isna().sum())
 print("missing delivery, completed:", orders.loc[completed, "delivery_minutes"].isna().sum())
 print("missing delivery, cancelled:", orders.loc[~completed, "delivery_minutes"].isna().sum())
 print(f"completed revenue: INR {orders.loc[completed, 'order_amount'].sum():,.2f}")
+
+
+orders = orders.drop(columns=["price_inr", "category"])
+orders["order_ts"] = orders["order_ts"].dt.strftime("%Y-%m-%d %H:%M:%S")
+orders.to_csv("data/clean/orders.csv", index=False)
