@@ -112,3 +112,15 @@ if __name__ == "__main__":
     result = run_agent("Please refund order ORD-110093, it arrived late.", "TEST")
     print(result["status"], result["llm_calls"], result["tokens_used"])
     print(result["final_answer"])
+    print(run_agent("Please refund order ORD-110093, it arrived late.", "TEST", token_limit=200)["status"])
+    print(run_agent("Please refund order ORD-110093, it arrived late.", "TEST", time_limit_seconds=0)["status"])
+    loop = run_agent("[LOOP] Refund my order.", "TEST")
+    print(loop["status"], loop["llm_calls"])
+
+
+
+
+
+
+
+
