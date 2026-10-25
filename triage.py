@@ -58,7 +58,25 @@ FEW_SHOT = ZERO_SHOT + (
 print("zero-shot contains CLASSIFY:", "CLASSIFY" in ZERO_SHOT)
 print("zero-shot contains EXAMPLES:", "EXAMPLES:" in ZERO_SHOT)
 print("few-shot contains EXAMPLES:", "EXAMPLES:" in FEW_SHOT)
+import random
+import time
+from mock_llm import chat, reset, TransientLLMError
 
+BASE_DELAY = 0.05
+MAX_RETRIES = 3
+
+def call_with_retries(messages, ticket_id):
+    for n in range(MAX_RETRIES + 1):
+        try:
+            return chat(messages)
+        except TransientLLMError:
+            if n == MAX_RETRIES:
+                raise
+            wait = BASE_DELAY * 2 ** n * random.uniform(0.9, 1.15)
+            print(f"retry ticket={ticket_id} attempt={n + 1} wait={wait:.4f}s")
+            time.sleep(wait)
+
+reset()
 
 
 
