@@ -38,7 +38,26 @@ print("substitutions:", totals, "total:", sum(totals.values()))
 # Check: re-applying the patterns to the redacted text should find nothing
 left = sum(len(re.findall(p, t)) for t in tickets["redacted"] for p, _ in PATTERNS)
 print("left after redaction:", left)
+CATEGORIES = ["billing", "delivery", "technical", "fraud"]
 
+ZERO_SHOT = (
+    "CLASSIFY the customer support ticket into exactly one category: "
+    + ", ".join(CATEGORIES)
+    + ". Reply with JSON only, in the form "
+    '{"category": "...", "reason": "..."}.'
+)
+
+FEW_SHOT = ZERO_SHOT + (
+    "\n\nEXAMPLES:\n"
+    'Ticket: "I was charged twice for my order." -> '
+    '{"category": "billing", "reason": "duplicate charge"}\n'
+    'Ticket: "An unauthorized payment appeared on my card." -> '
+    '{"category": "fraud", "reason": "unauthorized transaction"}\n'
+)
+
+print("zero-shot contains CLASSIFY:", "CLASSIFY" in ZERO_SHOT)
+print("zero-shot contains EXAMPLES:", "EXAMPLES:" in ZERO_SHOT)
+print("few-shot contains EXAMPLES:", "EXAMPLES:" in FEW_SHOT)
 
 
 
