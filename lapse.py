@@ -112,6 +112,28 @@ for name, model in [("LR", lr_grid.best_estimator_), ("RF", rf_grid.best_estimat
           "recall:", round(recall_score(y_test, pred), 3),
           "F1:", round(f1_score(y_test, pred), 3))
 
+import numpy as np
+from sklearn.utils import resample
+
+y_arr = y_train.values
+lap_idx = np.where(y_arr == 1)[0]
+non_idx = np.where(y_arr == 0)[0]
+print("before balancing: lapsed", len(lap_idx), "non-lapsed", len(non_idx))
+
+# Keep every original training row, and add random duplicates of lapsed rows
+extra = resample(lap_idx, replace=True,
+                 n_samples=len(non_idx) - len(lap_idx), random_state=42)
+bal_idx = np.concatenate([non_idx, lap_idx, extra])
+X_bal, y_bal = X_train_t[bal_idx], y_arr[bal_idx]
+print("after balancing: lapsed", (y_bal == 1).sum(), "non-lapsed", (y_bal == 0).sum())
+
+bal_model = LogisticRegression(C=0.1, max_iter=1000).fit(X_bal, y_bal)
+pred = bal_model.predict(X_test_t)
+print("balanced LR confusion matrix:\n", confusion_matrix(y_test, pred))
+print("balanced LR precision:", round(precision_score(y_test, pred), 3),
+      "recall:", round(recall_score(y_test, pred), 3),
+      "F1:", round(f1_score(y_test, pred), 3))
+
 
 
 
