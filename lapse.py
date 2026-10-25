@@ -63,3 +63,28 @@ print("train rows:", len(X_train), "test rows:", len(X_test))
 baseline = [0] * len(y_test)
 print("baseline accuracy:", round((y_test == 0).mean() * 100, 1), "%")
 print("baseline lapsed F1:", f1_score(y_test, baseline, zero_division=0))
+
+
+
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+cat_cols = ["city", "gender", "top_category"]
+num_cols = ["recency", "frequency", "monetary", "avg_discount",
+            "avg_delivery", "cancel_rate", "age", "tenure"]
+
+prep = ColumnTransformer([
+    ("cat", OneHotEncoder(drop="first", handle_unknown="ignore"), cat_cols),
+    ("num", StandardScaler(), num_cols),
+])
+
+X_train_t = prep.fit_transform(X_train)   # learns from training rows only
+X_test_t = prep.transform(X_test)         # applies the same settings
+
+print("train shape:", X_train_t.shape, "test shape:", X_test_t.shape)
+print("missing in train:", pd.isna(X_train_t).sum(), "missing in test:", pd.isna(X_test_t).sum())
+
+scaler = prep.named_transformers_["num"]
+freq_idx = num_cols.index("frequency")
+print("frequency mean learned by scaler (train):", round(scaler.mean_[freq_idx], 3))
+print("frequency mean across full cohort:", round(X["frequency"].mean(), 3))
