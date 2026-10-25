@@ -39,3 +39,19 @@ def retrieve(query, k=3):
 
 for hit in retrieve("refund policy late delivery"):
     print(hit["source"], hit["score"])
+from mock_llm import chat
+
+SYSTEM = ("POLICY ASSISTANT. Answer only from the supplied context. "
+          "If the context does not contain the answer, say: I could not find that information in the policy documents.")
+
+def answer(question):
+    hits = retrieve(question, k=3)
+    context = "\n".join(f"[{h['source']}] {h['text']}" for h in hits)
+    user = f"CONTEXT:\n{context}\nQUESTION:\n{question}"
+    resp = chat([{"role": "system", "content": SYSTEM},
+                 {"role": "user", "content": user}])
+    return resp.choices[0].message.content, [h["source"] for h in hits]
+
+text, sources = answer("What delivery time makes a completed order eligible for a full refund?")
+print("answer:", text)
+print("sources:", sources)
