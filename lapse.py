@@ -134,11 +134,36 @@ print("balanced LR precision:", round(precision_score(y_test, pred), 3),
       "recall:", round(recall_score(y_test, pred), 3),
       "F1:", round(f1_score(y_test, pred), 3))
 
+chosen = rf_grid.best_estimator_   # or lr_grid.best_estimator_
 
+names = prep.get_feature_names_out()
+if hasattr(chosen, "feature_importances_"):
+    imp = pd.Series(chosen.feature_importances_, index=names)
+else:
+    imp = pd.Series(chosen.coef_[0], index=names)
+top = imp.reindex(imp.abs().sort_values(ascending=False).index).head(5)
+print(top.round(3))
 
+import joblib
+import os
 
+os.makedirs("outputs", exist_ok=True)
+joblib.dump(chosen, "outputs/lapse_model.joblib")
+reloaded = joblib.load("outputs/lapse_model.joblib")
+print("reload matches:", (reloaded.predict(X_test_t) == chosen.predict(X_test_t)).all())
+seg = pd.read_csv("outputs/customer_segments.csv")
+premium_ids = set(seg.loc[seg["is_premium"], "customer_id"])
 
-
+proba = chosen.predict_proba(X_test_t)[:, 1]
+rl = pd.DataFrame({"customer_id": X_test.index,
+                   "lapse_probability": proba,
+                   "actually_lapsed": y_test.values})
+rl = rl[rl["customer_id"].isin(premium_ids)]
+rl = rl.sort_values("lapse_probability", ascending=False).head(10)
+rl.round(3).to_csv("outputs/retention_list.csv", index=False)
+print(rl.round(3))
+print("rows in list:", len(rl))
+print("truly lapsed in list:", rl["actually_lapsed"].sum(), "of", len(rl))
 
 
 
