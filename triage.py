@@ -164,6 +164,8 @@ def run_budgeted(prompt, budget):
         if spent + estimate > budget:
             rows.append({**base, "status": "budget_exhausted", "category": None, "tokens_used": 0})
             continue
+        assert row["status"] == "ok", "non-ok ticket reached the model"
+        assert not re.search(r"[\w.+-]+@[\w-]+\.[\w.]+|\b[6-9]\d{9}\b|ORD-\d{6}", row["redacted"]), "personal data in prompt"
         resp = call_with_retries(messages, row["ticket_id"])
         status, category = validate(resp.choices[0].message.content)
         used = resp.usage.total_tokens
