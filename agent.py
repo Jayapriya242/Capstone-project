@@ -64,33 +64,37 @@ TOOL_MAP = {
     "escalate_to_human": escalate_to_human,
 }
 
-def run_agent(user_message, scenario_id, max_iterations=6, token_limit=6000, time_limit_seconds=10):
+STATE_DIR = "state"
+
+def _checkpoint(run_id, scenario_id, messages, steps, llm_calls, tokens_used):
+    ck = {"run_id": run_id, "scenario_id": scenario_id, "messages": messages,
+          "tokens_used": tokens_used, "llm_calls": llm_calls,
+          "step": len(steps), "tools_executed": [s["tool"] for s in steps],
+          "steps": steps}
+    with open(os.path.join(STATE_DIR, f"{run_id}.json"), "w", encoding="utf-8") as f:
+        json.dump(ck, f, ensure_ascii=False)
+
+def _loop(run_id, scenario_id, messages, steps, llm_calls, tokens_used,
+          max_iterations, token_limit, time_limit_seconds, crash_after):
     import time
     from mock_llm import chat
-    system = ("AGENT. You are a refund agent. Look up the order, check the refund policy, "
-              "then calculate, issue or escalate the refund. Use the tools provided.")
-    messages = [{"role": "system", "content": system},
-                {"role": "user", "content": user_message}]
-    steps, llm_calls, tokens_used = [], 0, 0
     start = time.monotonic()
-
-    for _ in range(max_iterations):
+    while llm_calls < max_iterations:
         if time.monotonic() - start >= time_limit_seconds:
-            return {"status": "FALLBACK_TIMEOUT", "final_answer": "Stopped at the time limit. Please hand off to a human agent.",
+            return {"status": "FALLBACK_TIMEOUT",
+                    "final_answer": "Stopped at the time limit. Please hand off to a human agent.",
                     "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
         resp = chat(messages, tools=TOOLS_SPEC)
         llm_calls += 1
         tokens_used += resp.usage.total_tokens
         if tokens_used > token_limit:
-            return {"status": "FALLBACK_TOKEN_LIMIT", "final_answer": "Stopped at the token limit. Please hand off to a human agent.",
+            return {"status": "FALLBACK_TOKEN_LIMIT",
+                    "final_answer": "Stopped at the token limit. Please hand off to a human agent.",
                     "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
-
         msg = resp.choices[0].message
         if not msg.tool_calls:
-            text = msg.content
-            return {"status": text.split(":")[0], "final_answer": text,
+            return {"status": msg.content.split(":")[0], "final_answer": msg.content,
                     "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
-
         messages.append({"role": "assistant", "content": None,
                          "tool_calls": [{"id": tc.id, "name": tc.name, "arguments": tc.arguments}
                                         for tc in msg.tool_calls]})
@@ -99,10 +103,29 @@ def run_agent(user_message, scenario_id, max_iterations=6, token_limit=6000, tim
             steps.append({"tool": tc.name, "arguments": tc.arguments, "observation": result})
             messages.append({"role": "tool", "tool_call_id": tc.id, "name": tc.name,
                              "content": json.dumps(result)})
-
-    return {"status": "FALLBACK_MAX_ITERATIONS", "final_answer": "Reached the step limit. Please hand off to a human agent.",
+            _checkpoint(run_id, scenario_id, messages, steps, llm_calls, tokens_used)
+            if crash_after is not None and len(steps) == crash_after:
+                raise RuntimeError(f"simulated crash after tool execution {len(steps)}")
+    return {"status": "FALLBACK_MAX_ITERATIONS",
+            "final_answer": "Reached the step limit. Please hand off to a human agent.",
             "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
 
+def run_agent(user_message, scenario_id, max_iterations=6, token_limit=6000,
+              time_limit_seconds=10, run_id="run", crash_after=None):
+    system = ("AGENT. You are a refund agent. Look up the order, check the refund policy, "
+              "then calculate, issue or escalate the refund. Use the tools provided.")
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": user_message}]
+    return _loop(run_id, scenario_id, messages, [], 0, 0,
+                 max_iterations, token_limit, time_limit_seconds, crash_after)
+
+def resume_agent(run_id, max_iterations=6, token_limit=6000, time_limit_seconds=10):
+    with open(os.path.join(STATE_DIR, f"{run_id}.json"), encoding="utf-8") as f:
+        ck = json.load(f)
+    print("resuming", run_id, "after tools:", ck["tools_executed"])
+    return _loop(ck["run_id"], ck["scenario_id"], ck["messages"], ck["steps"],
+                 ck["llm_calls"], ck["tokens_used"],
+                 max_iterations, token_limit, time_limit_seconds, None)
 
 if __name__ == "__main__":
     print("tools defined:", list(TOOL_MAP))
@@ -116,6 +139,17 @@ if __name__ == "__main__":
     print(run_agent("Please refund order ORD-110093, it arrived late.", "TEST", time_limit_seconds=0)["status"])
     loop = run_agent("[LOOP] Refund my order.", "TEST")
     print(loop["status"], loop["llm_calls"])
+
+    scen = pd.read_csv("data/raw/agent_scenarios.csv")
+    s1_msg = scen.loc[scen["scenario_id"] == "S1", "message"].iloc[0]
+    try:
+        run_agent(s1_msg, "S1", run_id="S1_demo", crash_after=2)
+    except RuntimeError as e:
+        print("crash:", e)
+    res = resume_agent("S1_demo")
+    print("final:", res["status"], "llm_calls:", res["llm_calls"], "tokens:", res["tokens_used"])
+    print("tools across crash and resume:", [s["tool"] for s in res["steps"]])
+    print("final answer:", res["final_answer"])
 
 
 
