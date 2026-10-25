@@ -64,8 +64,51 @@ TOOL_MAP = {
     "escalate_to_human": escalate_to_human,
 }
 
+def run_agent(user_message, scenario_id, max_iterations=6, token_limit=6000, time_limit_seconds=10):
+    import time
+    from mock_llm import chat
+    system = ("AGENT. You are a refund agent. Look up the order, check the refund policy, "
+              "then calculate, issue or escalate the refund. Use the tools provided.")
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": user_message}]
+    steps, llm_calls, tokens_used = [], 0, 0
+    start = time.monotonic()
+
+    for _ in range(max_iterations):
+        if time.monotonic() - start >= time_limit_seconds:
+            return {"status": "FALLBACK_TIMEOUT", "final_answer": "Stopped at the time limit. Please hand off to a human agent.",
+                    "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
+        resp = chat(messages, tools=TOOLS_SPEC)
+        llm_calls += 1
+        tokens_used += resp.usage.total_tokens
+        if tokens_used > token_limit:
+            return {"status": "FALLBACK_TOKEN_LIMIT", "final_answer": "Stopped at the token limit. Please hand off to a human agent.",
+                    "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
+
+        msg = resp.choices[0].message
+        if not msg.tool_calls:
+            text = msg.content
+            return {"status": text.split(":")[0], "final_answer": text,
+                    "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
+
+        messages.append({"role": "assistant", "content": None,
+                         "tool_calls": [{"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                                        for tc in msg.tool_calls]})
+        for tc in msg.tool_calls:
+            result = TOOL_MAP[tc.name](**tc.arguments)
+            steps.append({"tool": tc.name, "arguments": tc.arguments, "observation": result})
+            messages.append({"role": "tool", "tool_call_id": tc.id, "name": tc.name,
+                             "content": json.dumps(result)})
+
+    return {"status": "FALLBACK_MAX_ITERATIONS", "final_answer": "Reached the step limit. Please hand off to a human agent.",
+            "steps": steps, "llm_calls": llm_calls, "tokens_used": tokens_used}
+
+
 if __name__ == "__main__":
     print("tools defined:", list(TOOL_MAP))
     print(get_order("ORD-999999"))
     print(get_order(pd.read_sql_query("SELECT order_id FROM orders LIMIT 1",
                     sqlite3.connect("data/instamart.db"))["order_id"][0]))
+    result = run_agent("Please refund order ORD-110093, it arrived late.", "TEST")
+    print(result["status"], result["llm_calls"], result["tokens_used"])
+    print(result["final_answer"])
