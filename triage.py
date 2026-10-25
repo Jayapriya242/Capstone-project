@@ -109,7 +109,38 @@ for _, row in tickets[tickets["status"] == "ok"].iterrows():
 results = pd.DataFrame(rows)
 print(results["status"].value_counts())
 print("total tokens:", results["tokens"].sum())
+def run_pipeline(prompt, label):
+    reset()
+    rows = []
+    for _, row in tickets[tickets["status"] == "ok"].iterrows():
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": row["redacted"]},
+        ]
+        resp = call_with_retries(messages, row["ticket_id"])
+        status, category = validate(resp.choices[0].message.content)
+        rows.append({"ticket_id": row["ticket_id"], "status": status,
+                     "category": category, "tokens": resp.usage.total_tokens,
+                     "true_category": row["true_category"]})
+    df = pd.DataFrame(rows)
+    classified = df[df["status"].str.startswith("classified")]
+    correct = (classified["category"] == classified["true_category"]).sum()
+    total_tokens = df["tokens"].sum()
+    print()
+    print(label)
+    print("classified:", len(classified))
+    print("correct:", correct, "of", len(classified))
+    print("accuracy:", round(correct / len(classified) * 100, 1), "%")
+    print("total tokens:", total_tokens)
+    print("tokens per classified ticket:", round(total_tokens / len(classified), 1))
+    return df, classified
 
+zs_df, zs_cls = run_pipeline(ZERO_SHOT, "zero-shot")
+fs_df, fs_cls = run_pipeline(FEW_SHOT, "few-shot")
+
+print()
+print("zero-shot confusion table (rows = true, columns = predicted):")
+print(pd.crosstab(zs_cls["true_category"], zs_cls["category"]))
 
 
 
