@@ -88,3 +88,42 @@ scaler = prep.named_transformers_["num"]
 freq_idx = num_cols.index("frequency")
 print("frequency mean learned by scaler (train):", round(scaler.mean_[freq_idx], 3))
 print("frequency mean across full cohort:", round(X["frequency"].mean(), 3))
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import confusion_matrix, precision_score, recall_score
+
+lr_grid = GridSearchCV(
+    LogisticRegression(max_iter=1000),
+    {"C": [0.01, 0.1, 1, 10, 100]},
+    cv=5, scoring="f1",
+).fit(X_train_t, y_train)
+print("LR best params:", lr_grid.best_params_, "best CV F1:", round(lr_grid.best_score_, 3))
+rf_grid = GridSearchCV(
+    RandomForestClassifier(n_estimators=100, random_state=42),
+    {"max_depth": [3, 5, 8], "min_samples_leaf": [5, 10, 20]},
+    cv=5, scoring="f1",
+).fit(X_train_t, y_train)
+print("RF best params:", rf_grid.best_params_, "best CV F1:", round(rf_grid.best_score_, 3))
+for name, model in [("LR", lr_grid.best_estimator_), ("RF", rf_grid.best_estimator_)]:
+    pred = model.predict(X_test_t)
+    print(name, "confusion matrix:\n", confusion_matrix(y_test, pred))
+    print(name, "precision:", round(precision_score(y_test, pred), 3),
+          "recall:", round(recall_score(y_test, pred), 3),
+          "F1:", round(f1_score(y_test, pred), 3))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
