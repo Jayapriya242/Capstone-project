@@ -142,7 +142,71 @@ print()
 print("zero-shot confusion table (rows = true, columns = predicted):")
 print(pd.crosstab(zs_cls["true_category"], zs_cls["category"]))
 
+import os
+os.makedirs("outputs", exist_ok=True)
 
+TOKEN_BUDGET_DEMO = 6000
+TOKEN_BUDGET_FULL = 100000
+
+def run_budgeted(prompt, budget):
+    reset()
+    spent = 0
+    rows = []
+    for _, row in tickets.iterrows():
+        base = {"ticket_id": row["ticket_id"], "customer_id": row["customer_id"],
+                "true_category": row["true_category"]}
+        if row["status"] != "ok":
+            rows.append({**base, "status": row["status"], "category": None, "tokens_used": 0})
+            continue
+        messages = [{"role": "system", "content": prompt},
+                    {"role": "user", "content": row["redacted"]}]
+        estimate = sum(est_tokens(m["content"]) for m in messages)
+        if spent + estimate > budget:
+            rows.append({**base, "status": "budget_exhausted", "category": None, "tokens_used": 0})
+            continue
+        resp = call_with_retries(messages, row["ticket_id"])
+        status, category = validate(resp.choices[0].message.content)
+        used = resp.usage.total_tokens
+        spent += used
+        rows.append({**base, "status": status, "category": category, "tokens_used": used})
+    return pd.DataFrame(rows), spent
+
+# (a) Budget demo with zero-shot prompt
+demo_df, demo_spent = run_budgeted(ZERO_SHOT, TOKEN_BUDGET_DEMO)
+demo_df.to_csv("outputs/triage_budget_demo.csv", index=False)
+print("demo tokens spent:", demo_spent)
+print("demo status counts:")
+print(demo_df["status"].value_counts())
+
+# (b) Full run with few-shot prompt, then routing
+full_df, full_spent = run_budgeted(FEW_SHOT, TOKEN_BUDGET_FULL)
+
+seg = pd.read_csv("outputs/customer_segments.csv").set_index("customer_id")
+full_df["segment_name"] = full_df["customer_id"].map(seg["segment_name"])
+full_df["premium"] = full_df["customer_id"].map(seg["is_premium"]).fillna(False).astype(bool)
+
+def route(row):
+    if row["status"] in ("skipped_empty", "flagged_long", "flagged_invalid_output", "budget_exhausted"):
+        return "human_review", "NORMAL"
+    if row["category"] == "fraud":
+        return "security_team", "HIGH"
+    if row["premium"]:
+        return "premium_desk", "HIGH"
+    return "support_queue", "NORMAL"
+
+routes = full_df.apply(route, axis=1, result_type="expand")
+full_df["route"] = routes[0]
+full_df["priority"] = routes[1]
+
+out = full_df[["ticket_id", "customer_id", "status", "category", "segment_name",
+               "priority", "route", "tokens_used"]]
+out.to_csv("outputs/triage_results.csv", index=False)
+
+print("rows:", len(out))
+print("full run tokens spent:", full_spent)
+print(out["status"].value_counts())
+print(out["route"].value_counts())
+print("budget_exhausted in full run:", (out["status"] == "budget_exhausted").sum())
 
 
 
