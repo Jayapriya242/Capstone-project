@@ -77,6 +77,38 @@ def call_with_retries(messages, ticket_id):
             time.sleep(wait)
 
 reset()
+import json
+
+ALLOWED = set(CATEGORIES)
+
+def validate(reply):
+    try:
+        data = json.loads(reply)
+        if isinstance(data, dict) and data.get("category") in ALLOWED:
+            return "classified_json", data["category"]
+        return "flagged_invalid_output", None
+    except json.JSONDecodeError:
+        pass
+    words = set(re.findall(r"[a-z]+", reply.lower())) & ALLOWED
+    if len(words) == 1:
+        return "classified_keyword", words.pop()
+    return "flagged_invalid_output", None
+
+reset()
+rows = []
+for _, row in tickets[tickets["status"] == "ok"].iterrows():
+    messages = [
+        {"role": "system", "content": ZERO_SHOT},
+        {"role": "user", "content": row["redacted"]},
+    ]
+    resp = call_with_retries(messages, row["ticket_id"])
+    status, category = validate(resp.choices[0].message.content)
+    rows.append({"ticket_id": row["ticket_id"], "status": status,
+                 "category": category, "tokens": resp.usage.total_tokens})
+
+results = pd.DataFrame(rows)
+print(results["status"].value_counts())
+print("total tokens:", results["tokens"].sum())
 
 
 
