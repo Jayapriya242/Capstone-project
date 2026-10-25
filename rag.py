@@ -55,3 +55,62 @@ def answer(question):
 text, sources = answer("What delivery time makes a completed order eligible for a full refund?")
 print("answer:", text)
 print("sources:", sources)
+import pandas as pd
+
+ev = pd.read_csv("data/raw/policy_eval.csv", keep_default_na=False)
+answerable = ev[ev["expected_doc"] != "NONE"]
+unanswerable = ev[ev["expected_doc"] == "NONE"]
+
+rows = []
+for _, q in ev.iterrows():
+    text, sources = answer(q["question"])
+    rows.append({
+        "question": q["question"],
+        "expected_doc": q["expected_doc"],
+        "doc_in_top3": q["expected_doc"] in sources,
+        "fact_in_answer": q["expected_fact"] in text,
+        "fallback": text.startswith("I could not find"),
+    })
+res = pd.DataFrame(rows)
+
+ans_res = res.loc[answerable.index]
+una_res = res.loc[unanswerable.index]
+print("answerable: doc in top 3:", ans_res["doc_in_top3"].sum(), "of", len(ans_res))
+print("answerable: fact in answer:", ans_res["fact_in_answer"].sum(), "of", len(ans_res))
+print("unanswerable: fallback:", una_res["fallback"].sum(), "of", len(una_res))
+print()
+print(res[["doc_in_top3", "fact_in_answer", "fallback"]].assign(
+    question=res["question"].str[:50]).to_string())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
